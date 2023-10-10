@@ -95,3 +95,16 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+//trace
+uint64
+sys_trace(void)
+{
+  int mask;
+  if(argint(0,&mask) < 0){
+    return -1;
+  }
+  myproc()->trace_mask |= mask;//按位或其实也就是把给指定的位置上加上1
+  return 0;
+}
