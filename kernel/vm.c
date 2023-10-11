@@ -356,13 +356,13 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
 
-  while(len > 0){
+  while(len > 0){//所以这里我们才需要while一直算，因为可能横跨很多个page
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
-    if(n > len)
+    if(n > len)//这里需要判断一下，因为len可能跨越到下一个page去了
       n = len;
     memmove((void *)(pa0 + (dstva - va0)), src, n);
 
