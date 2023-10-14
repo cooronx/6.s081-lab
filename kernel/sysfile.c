@@ -484,3 +484,21 @@ sys_pipe(void)
   }
   return 0;
 }
+
+int sum(int n){
+  int tot = 0;
+  for(int i = 1;i<=n;++i){
+    tot+=i;
+  }
+  return tot;
+}
+
+
+uint64
+sys_demo(void){
+  int x = sum(5);
+  if(x < 1){
+    return -1;
+  }
+  return 0;
+}
