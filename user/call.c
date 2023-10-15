@@ -8,10 +8,16 @@ int g(int x) {
 }
 
 int f(int x) {
-  return g(x);
+  int temp = x;
+  int cnt = 0;
+  while(temp){
+    temp /= 10;
+    ++cnt;
+  }
+  return cnt;
 }
 
 void main(void) {
-  printf("%d %d\n", f(8)+1, 13);
+  printf("%d helasdaslo %d\n", f(8)+1, 13);
   exit(0);
 }
