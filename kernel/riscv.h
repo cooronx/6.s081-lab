@@ -186,6 +186,15 @@ w_mtvec(uint64 x)
 
 #define MAKE_SATP(pagetable) (SATP_SV39 | (((uint64)pagetable) >> 12))
 
+static inline uint64
+r_fp()
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r" (x) );
+  return x;
+}
+
+
 // supervisor address translation and protection;
 // holds the address of the page table.
 static inline void 

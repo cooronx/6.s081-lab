@@ -77,8 +77,14 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    ++p->tick_since_last_alarm;
+    if(p->interval != 0 && p->tick_since_last_alarm == p->interval){
+      *p->prev_trapframe = *p->trapframe;
+      p->trapframe->epc = p->alarm_handler;
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -218,3 +224,19 @@ devintr()
   }
 }
 
+
+void backtrace(){
+  printf("backtrace:\n");
+
+  uint64 current_fp = r_fp();
+  uint64 page_top = PGROUNDUP(current_fp);
+
+  while(page_top > current_fp){
+    uint64 next_fp = *(uint64 *)(current_fp - 16);
+    uint64 return_addr = *(uint64 *)(current_fp - 8);
+
+    printf("%p\n",return_addr);
+
+    current_fp = next_fp;
+  }
+}

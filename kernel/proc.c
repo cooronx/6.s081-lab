@@ -113,6 +113,12 @@ found:
     return 0;
   }
 
+  // Allocate another trapframe,only for timer event recover
+  if((p->prev_trapframe = (struct trapframe *)kalloc()) == 0){
+    release(&p->lock);
+    return 0;
+  }
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -120,6 +126,11 @@ found:
     release(&p->lock);
     return 0;
   }
+
+  p->interval = 0;
+  p->tick_since_last_alarm = 0;
+  p->alarm_handler = 0;
+
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -138,7 +149,14 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+  if(p->prev_trapframe){
+    kfree((void*)p->prev_trapframe);
+  }
   p->trapframe = 0;
+  p->prev_trapframe = 0;
+  p->alarm_handler = 0;
+  p->tick_since_last_alarm = 0;
+  p->interval = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;

@@ -18,6 +18,7 @@ int f(int x) {
 }
 
 void main(void) {
-  printf("%d helasdaslo %d\n", f(8)+1, 13);
+  printf("%d hello call %d\n", f(8)+1, 13);
+  printf("x=%d y=%d\n",3);
   exit(0);
 }
