@@ -2,6 +2,7 @@
     "files.associations": {
         "syscall.h": "c",
         "*.asm": "c",
-        "cstdio": "c"
+        "cstdio": "c",
+        "*.tcc": "c"
     }
 }

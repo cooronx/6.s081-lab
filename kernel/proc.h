@@ -103,8 +103,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  uint64 interval;
-  uint64 alarm_handler;
-  uint64 tick_since_last_alarm;
-  struct trapframe *prev_trapframe; 
+  uint64 interval;             // 多少时间呼叫一次函数  
+  uint64 alarm_handler;        // 呼叫的函数地址
+  uint64 tick_since_last_alarm;// 距离上一次呼叫过去了多少tick
+  struct trapframe *prev_trapframe;// 保存上次的trapframe 
 };

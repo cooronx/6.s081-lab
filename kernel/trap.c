@@ -80,7 +80,7 @@ usertrap(void)
   if(which_dev == 2){
     ++p->tick_since_last_alarm;
     if(p->interval != 0 && p->tick_since_last_alarm == p->interval){
-      *p->prev_trapframe = *p->trapframe;
+      *p->prev_trapframe = *p->trapframe;//捏猫猫的，要先保存trapframe，因为底下已经改变了epc的值，让我找了半天
       p->trapframe->epc = p->alarm_handler;
     }
     yield();
