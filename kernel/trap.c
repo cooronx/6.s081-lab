@@ -16,6 +16,8 @@ void kernelvec();
 
 extern int devintr();
 
+int cowcopy(pagetable_t,uint64);
+
 void
 trapinit(void)
 {
@@ -67,12 +69,26 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if(r_scause() == 15){
+    uint64 va = r_stval();//引起fault的虚拟地址
+    if(va >= p->sz){
+      p->killed = 1;
+      goto err;
+    }
+    if(cowcopy(p->pagetable,va) != 0){
+      p->killed = 1;
+      goto err;
+    }
+
+  }
+
+  else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
+err:
   if(p->killed)
     exit(-1);
 
@@ -218,3 +234,42 @@ devintr()
   }
 }
 
+
+// copy on write fork
+// va may not be page-aligned
+// return 0 on success -1 on error
+
+int
+cowcopy(pagetable_t pagetable,uint64 va){
+  pte_t *pte;
+  uint64 pa;
+  char *mem;
+
+  va = PGROUNDDOWN(va);
+  if(va >= MAXVA){
+    return -1;
+  }  
+  if((pte = walk(pagetable,va,0)) == 0){
+    return -1;
+  }
+  if((*pte & PTE_V) == 0){
+    panic("cowcopy : no PTE_V set");
+  }
+  if(*pte & PTE_COW){
+    pa = PTE2PA(*pte);
+    mem = (char*)kalloc();
+    memset(mem,0,sizeof(mem));
+    uvmunmap(pagetable,va,1,1);
+    memmove(mem,(void*)pa,PGSIZE);
+
+    if(mappages(pagetable,va,PGSIZE,(uint64)mem,PTE_V|PTE_W|PTE_R|PTE_X) != 0){
+      kfree(mem);
+      return -1;
+    }
+  }
+  else{
+    panic("cowcopy : no PTE_COW set");
+  }
+
+  return 0;
+}
