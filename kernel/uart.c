@@ -160,6 +160,7 @@ uartstart()
   }
 }
 
+
 // read one input character from the UART.
 // return -1 if none is waiting.
 int

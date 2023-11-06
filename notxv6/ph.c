@@ -17,6 +17,9 @@ struct entry *table[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
 
+pthread_mutex_t bucketlocks[NBUCKET];
+
+
 double
 now()
 {
@@ -38,6 +41,7 @@ insert(int key, int value, struct entry **p, struct entry *n)
 static 
 void put(int key, int value)
 {
+  
   int i = key % NBUCKET;
 
   // is the key already present?
@@ -51,8 +55,11 @@ void put(int key, int value)
     e->value = value;
   } else {
     // the new is new.
+    pthread_mutex_lock(&bucketlocks[i]);
     insert(key, value, &table[i], table[i]);
+    pthread_mutex_unlock(&bucketlocks[i]);
   }
+  
 }
 
 static struct entry*
@@ -102,15 +109,21 @@ main(int argc, char *argv[])
   pthread_t *tha;
   void *value;
   double t1, t0;
-
   if (argc < 2) {
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
     exit(-1);
   }
+
   nthread = atoi(argv[1]);
+
+  for(int i = 0;i<NBUCKET;++i){
+    pthread_mutex_init(&bucketlocks[i],NULL);
+  }
+
+
   tha = malloc(sizeof(pthread_t) * nthread);
   srandom(0);
-  assert(NKEYS % nthread == 0);
+  assert(NKEYS % nthread == 0);//不知道为什么只能是偶数？看看第83行和第86行
   for (int i = 0; i < NKEYS; i++) {
     keys[i] = random();
   }
