@@ -41,11 +41,12 @@ binit(void)
   initlock(&bcache.lock, "bcache");
 
   // Create linked list of buffers
+  // 双向队列
   bcache.head.prev = &bcache.head;
   bcache.head.next = &bcache.head;
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
     b->next = bcache.head.next;
-    b->prev = &bcache.head;
+    b->prev = &bcache.head;//让新插入的指回头节点
     initsleeplock(&b->lock, "buffer");
     bcache.head.next->prev = b;
     bcache.head.next = b;
