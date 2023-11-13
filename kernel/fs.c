@@ -91,7 +91,6 @@ bfree(int dev, uint b)
 {
   struct buf *bp;
   int bi, m;
-
   bp = bread(dev, BBLOCK(b, sb));
   bi = b % BPB;
   m = 1 << (bi % 8);
@@ -201,7 +200,8 @@ ialloc(uint dev, short type)
 
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum, sb));
-    dip = (struct dinode*)bp->data + inum%IPB;
+    dip = (struct dinode*)bp->data + inum%IPB;//data相当于是一个指向那一个block的uchar指针，不过这个block里面装的就是dinode，所以进行强制转换非常合理。
+                                              //但是我们还要加上偏移量，因为一个block里面有很多dinode
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
