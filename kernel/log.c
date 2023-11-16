@@ -33,13 +33,13 @@
 // Contents of the header block, used for both the on-disk header block
 // and to keep track in memory of logged block# before commit.
 struct logheader {
-  int n;
-  int block[LOGSIZE];
+  int n;//有多少个logged blocks，我们也是用这个来表示是否还有事务未被提交，如果操作系统启动的时候这里还有不等于0，我们就要恢复上次未完成的事务。
+  int block[LOGSIZE];//每个looged block的block number
 };
 
 struct log {
   struct spinlock lock;
-  int start;
+  int start;//第一个log block的block number，从super block中获取而来
   int size;
   int outstanding; // how many FS sys calls are executing.
   int committing;  // in commit(), please wait.
@@ -182,7 +182,7 @@ write_log(void)
 
   for (tail = 0; tail < log.lh.n; tail++) {
     struct buf *to = bread(log.dev, log.start+tail+1); // log block
-    struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
+    struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block 之前保存的要被写入的buf
     memmove(to->data, from->data, BSIZE);
     bwrite(to);  // write the log
     brelse(from);
@@ -194,7 +194,7 @@ static void
 commit()
 {
   if (log.lh.n > 0) {
-    write_log();     // Write modified blocks from cache to log
+    write_log();     // 先把改变了的block存入到log里面
     write_head();    // Write header to disk -- the real commit
     install_trans(0); // Now install writes to home locations
     log.lh.n = 0;
@@ -218,8 +218,10 @@ log_write(struct buf *b)
 
   if (log.lh.n >= LOGSIZE || log.lh.n >= log.size - 1)
     panic("too big a transaction");
-  if (log.outstanding < 1)
+  if (log.outstanding < 1){
+    printf("hello world");
     panic("log_write outside of trans");
+  }
 
   acquire(&log.lock);
   for (i = 0; i < log.lh.n; i++) {
@@ -228,7 +230,7 @@ log_write(struct buf *b)
   }
   log.lh.block[i] = b->blockno;
   if (i == log.lh.n) {  // Add new block to log?
-    bpin(b);
+    bpin(b);//这里pin一下，防止这个buf被逐出了
     log.lh.n++;
   }
   release(&log.lock);

@@ -142,9 +142,11 @@ sys_link(void)
   iupdate(ip);
   iunlock(ip);
 
+  printf("before link %s\n",name);
   if((dp = nameiparent(new, name)) == 0)
     goto bad;
   ilock(dp);
+  printf("after link %s\n",name);
   if(dp->dev != ip->dev || dirlink(dp, name, ip->inum) < 0){
     iunlockput(dp);
     goto bad;
@@ -254,6 +256,9 @@ create(char *path, short type, short major, short minor)
     ilock(ip);
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
       return ip;
+    if(type == T_SYMLINK){
+      return ip;
+    }
     iunlockput(ip);
     return 0;
   }
@@ -291,6 +296,8 @@ sys_open(void)
   struct file *f;
   struct inode *ip;
   int n;
+  uint link_depth = 0;
+  char target[MAXPATH];
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
@@ -320,6 +327,30 @@ sys_open(void)
     iunlockput(ip);
     end_op();
     return -1;
+  }
+
+  while(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+    memset(target,0,sizeof(target));
+    if(link_depth > 10){
+      printf("a\n");
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    if(readi(ip,0,(uint64)target,0,MAXPATH) < 0){
+      printf("b\n");
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    iunlockput(ip);//记得来这里把我们刚刚上的锁给unlock，不然就死锁了
+    if((ip = namei(target)) == 0){
+      printf("c\n");
+      end_op();
+      return -1;
+    }
+    ilock(ip);//这里必须要锁一下，因为readi需要我们拥有锁，这里相当于是对每个我们都要上锁。当然本身这个ip已经在外面上锁了
+    ++link_depth;
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -484,3 +515,43 @@ sys_pipe(void)
   }
   return 0;
 }
+
+
+//create a symbolic link at path
+uint64
+sys_symlink(void){
+  
+  char target[MAXPATH], path[MAXPATH];
+  
+  struct inode *new_inode;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+  // if((target_inode = namei(target)) == 0){//首先看一下target文件存在吗
+  //   goto bad;
+  // } 这里必须注释掉，因为symlink即使文件不存在也不会报错，别问我为什么要这样设计，要求就是这样的
+  if((new_inode = namei(path)) != 0){
+    goto bad;
+  }
+
+
+  if((new_inode = create(path,T_SYMLINK,9,9)) == 0){//这里create自动获取了new_inode的锁，所以返回的时候一定要解开，否则会产生死锁
+    goto bad;
+  }
+  if(writei(new_inode,0,(uint64)target,0,MAXPATH) < 0){
+    panic("symlink writei");
+  }
+
+  
+  iunlockput(new_inode);
+  end_op();
+
+  return 0;
+
+bad:
+  end_op();
+  return -1;
+}
+

@@ -377,7 +377,7 @@ iunlockput(struct inode *ip)
 static uint
 bmap(struct inode *ip, uint bn)
 {
-  uint addr, *a;
+  uint addr, *firstlayer,*secondlayer;
   struct buf *bp;
 
   if(bn < NDIRECT){
@@ -386,15 +386,39 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
   bn -= NDIRECT;
-
+  //printf("%d\n",bn);
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
-    a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
-      a[bn] = addr = balloc(ip->dev);
+    firstlayer = (uint*)bp->data;
+    if((addr = firstlayer[bn]) == 0){
+      firstlayer[bn] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+  bn -= NINDIRECT;
+
+  if(bn < NDOUBLY){
+    
+    if((addr = ip->addrs[DOUBLYBN]) == 0){
+      ip->addrs[DOUBLYBN] = addr = balloc(ip->dev);
+    }
+    bp = bread(ip->dev,addr);
+    firstlayer = (uint*)bp->data;
+    if((addr = firstlayer[bn/256]) == 0){
+      firstlayer[bn/256] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev,addr);
+    secondlayer = (uint*)bp->data;
+
+    if((addr = secondlayer[bn%256]) == 0){
+      secondlayer[bn%256] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
@@ -413,6 +437,10 @@ itrunc(struct inode *ip)
   struct buf *bp;
   uint *a;
 
+  uint* firstlayer;
+  uint* secondlayer;
+  struct buf *bp_2;
+
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
@@ -430,6 +458,27 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[DOUBLYBN]){
+    bp = bread(ip->dev,ip->addrs[DOUBLYBN]);
+    firstlayer = (uint*)bp->data;
+    for(i = 0;i < 256; ++i){
+      if(firstlayer[i]){
+        bp_2 = bread(ip->dev,firstlayer[i]);
+        secondlayer = (uint*)bp_2->data;
+        for(int j = 0;j<256;++j){
+          if(secondlayer[j]){
+            bfree(ip->dev,secondlayer[j]);
+          }
+        }
+        brelse(bp_2);
+        bfree(ip->dev,firstlayer[i]);
+      }  
+    }
+    brelse(bp);
+    bfree(ip->dev,ip->addrs[DOUBLYBN]); 
+    ip->addrs[DOUBLYBN] = 0;
   }
 
   ip->size = 0;
