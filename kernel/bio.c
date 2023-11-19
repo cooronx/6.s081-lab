@@ -23,6 +23,8 @@
 #include "fs.h"
 #include "buf.h"
 
+///别看了，lock这个lab你是在cooronx这个分支里面做的，这个里面啥都没有
+
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
