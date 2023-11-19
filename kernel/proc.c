@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -274,6 +275,7 @@ fork(void)
     return -1;
   }
 
+  
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -301,6 +303,13 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+
+  for(int i = 0;i<VMASIZE;++i){
+    if(p->vma[i].valid == 1){
+      np->vma[i] = p->vma[i];
+      filedup(p->vma[i].f);
+    }
+  }
 
   release(&np->lock);
 
@@ -350,6 +359,17 @@ exit(int status)
       struct file *f = p->ofile[fd];
       fileclose(f);
       p->ofile[fd] = 0;
+    }
+  }
+
+  for (int i = 0; i < VMASIZE; i++) {
+    if (p->vma[i].valid) {
+      if (p->vma[i].flags & MAP_SHARED) {
+        filewrite(p->vma[i].f, p->vma[i].address, p->vma[i].length);
+      }
+      fileclose(p->vma[i].f);
+      uvmunmap(p->pagetable, p->vma[i].address, p->vma[i].length / PGSIZE, 1);
+      p->vma[i].valid = 0;
     }
   }
 

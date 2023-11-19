@@ -34,15 +34,15 @@
 // and to keep track in memory of logged block# before commit.
 struct logheader {
   int n;
-  int block[LOGSIZE];
+  int block[LOGSIZE]; //记录了被log了的blockno
 };
 
 struct log {
   struct spinlock lock;
-  int start;
-  int size;
-  int outstanding; // how many FS sys calls are executing.
-  int committing;  // in commit(), please wait.
+  int start;//log 的起始blockno
+  int size;//log block 的个数
+  int outstanding; // 当前有多少个文件系统调用在执行
+  int committing;  // 表示当前处于提交状态
   int dev;
   struct logheader lh;
 };
@@ -152,7 +152,7 @@ end_op(void)
   log.outstanding -= 1;
   if(log.committing)
     panic("log.committing");
-  if(log.outstanding == 0){
+  if(log.outstanding == 0){//如果现在没有文件系统的系统调用了
     do_commit = 1;
     log.committing = 1;
   } else {
@@ -194,10 +194,10 @@ static void
 commit()
 {
   if (log.lh.n > 0) {
-    write_log();     // Write modified blocks from cache to log
-    write_head();    // Write header to disk -- the real commit
-    install_trans(0); // Now install writes to home locations
-    log.lh.n = 0;
+    write_log();     // 先把内存中保存的要更改的block存入log block中
+    write_head();    // 把内存中的log header更新到磁盘上面去
+    install_trans(0); // 开始把log里面的给写入回原位置
+    log.lh.n = 0;     //代表这个事务结束
     write_head();    // Erase the transaction from the log
   }
 }
@@ -226,7 +226,7 @@ log_write(struct buf *b)
     if (log.lh.block[i] == b->blockno)   // log absorbtion
       break;
   }
-  log.lh.block[i] = b->blockno;
+  log.lh.block[i] = b->blockno;//把要更改的block先保存在内存中
   if (i == log.lh.n) {  // Add new block to log?
     bpin(b);
     log.lh.n++;

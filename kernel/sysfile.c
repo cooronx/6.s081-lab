@@ -16,6 +16,8 @@
 #include "file.h"
 #include "fcntl.h"
 
+
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -484,3 +486,133 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void){
+  uint64 start_address;
+  int length;
+  int prot;// short for protection
+  int flags;// see fcntl.h
+  int fd; //file descriptor
+  int offset;
+  struct file *f;
+  struct proc *p;
+
+  p = myproc();
+
+
+  //获取参数
+  if(argaddr(0,&start_address) < 0){
+    printf("mmap:get st");
+    return -1;
+  }
+  if(argint(1,&length) < 0){
+    printf("mmap:get len");
+    return -1;
+  }
+  if(argint(2,&prot) < 0){
+    printf("mmap:get prot");
+    return -1;
+  }
+  if(argint(3,&flags) < 0){
+    printf("mmap:get flags");
+    return -1;
+  }
+  if(argfd(4,&fd,&f) < 0){
+    printf("mmap:get fd and file");
+    return -1;
+  }
+  if(argint(5,&offset) < 0){
+    printf("mmap:get offset");
+    return -1;
+  }
+
+  if((flags & MAP_PRIVATE) == 0){
+    if(!f->writable && (prot & PROT_WRITE)){
+      return 0xffffffffffffffff;
+    }
+  }
+
+  
+  length = PGROUNDUP(length);
+
+  //寻找可用的vma
+  for(int i = 0;i < VMASIZE; ++i){
+    struct VMA *vma = &p->vma[i];
+    if(vma->valid == 0){//找到了一个可用的
+      vma->valid = 1;
+      vma->address = p->sz;
+      vma->length = length;
+      vma->prot = prot;
+      vma->flags = flags;
+      vma->offset = offset;
+      vma->f = f;
+      //增大进程的空间
+      p->sz += vma->length;
+      filedup(vma->f);
+      return vma->address;
+    }    
+  }
+
+  return 0xffffffffffffffff;
+}
+
+
+uint64
+sys_munmap(void){
+  uint64 start_address;
+  int length;
+
+  if(argaddr(0,&start_address) < 0){
+    printf("mmap:get st");
+    return -1;
+  }
+  if(argint(1,&length) < 0){
+    printf("mmap:get len");
+    return -1;
+  }
+  
+  
+  
+  struct proc *p = myproc();
+  for(int i = 0;i < VMASIZE; ++i){
+    struct VMA *vma = &p->vma[i];
+    if(vma->valid == 1 && start_address >= vma->address && start_address <= vma->address + vma->length){
+      if(vma->flags & MAP_SHARED){
+        begin_op();
+        ilock(vma->f->ip);
+        if(writei(vma->f->ip,1,start_address,0,length) < 0){
+          printf("%p\n %d\n",start_address,length);
+          printf("write back to file error\n");
+          iunlock(vma->f->ip);
+          return -1;
+        }
+        iunlock(vma->f->ip);
+        end_op();
+      }
+      start_address = PGROUNDDOWN(start_address);
+      length = PGROUNDUP(length);
+      uvmunmap(p->pagetable,start_address,length/PGSIZE,1);
+      if(start_address == vma->address && vma->length == length){
+        vma->f->ref--;
+        vma->valid = 0;
+      }
+      else if(start_address == vma->address){
+        vma->address += length;
+        vma->length -= length;
+        vma->offset += length;
+      }
+      else if(start_address + length == vma->address + vma->length){
+        vma->length -= length;
+      }
+      else{
+        panic("munmap !!!");
+      }
+      return 0;
+    }
+  }
+  return 0;//这里必须得返回0，因为有可能会出现mmap了3个page，但是实际上文件只有1个page大小，导致munmap的时候找不到
+}
+
+
+

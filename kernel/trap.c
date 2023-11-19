@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -65,14 +69,28 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  }
+  else if(r_scause() == 13 || r_scause() == 15){
+    if(r_stval() > MAXVA || r_stval() > p->sz){
+      p->killed = 1;
+      goto bad;
+    }
+
+    if(mmapalloc(r_stval()) < 0){
+      printf("mmapalloc\n");
+      p->killed = 1;
+      goto bad;
+    }
+  } 
+  else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else {     
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
+bad:
   if(p->killed)
     exit(-1);
 
@@ -218,3 +236,44 @@ devintr()
   }
 }
 
+int mmapalloc(uint64 va){
+    struct proc *p = myproc();
+    char *mem;
+
+    if((mem = kalloc()) == 0){
+      return -1;
+    }
+    
+    memset(mem,0,PGSIZE);
+    for(int i = 0;i < VMASIZE; ++i){
+      struct VMA *vma = &p->vma[i];
+      if(va >= vma->address && va < vma->address + vma->length && vma->valid == 1){
+        va = PGROUNDDOWN(va);
+        struct inode *ip = vma->f->ip;
+        
+        ilock(ip);
+        int cnt = 0;
+        if((cnt = readi(ip,0,(uint64)mem,vma->offset + va - vma->address,PGSIZE)) < 0){
+          iunlock(ip);
+          return -1;
+        }
+        iunlock(ip);
+
+        int prot = 0;
+        if(vma->prot & PROT_READ){
+          prot |= PTE_R;
+        }
+        if(vma->prot & PROT_WRITE){
+          prot |= PTE_W;
+        }
+        prot |= PTE_U;
+        if(mappages(p->pagetable,va,PGSIZE,(uint64)mem,prot) != 0){
+          kfree(mem);
+          return -1;
+        }
+        return 0;
+      }
+    }
+    kfree(mem);
+    return -1;
+}
