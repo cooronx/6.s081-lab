@@ -33,7 +33,7 @@ struct {
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
   struct buf head[NBUCKETS];
-} bcache;
+} bcache;//实现了一个近似的LRU
 
 int
 hash(int no){
